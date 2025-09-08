@@ -1,0 +1,14 @@
+aiofiles==23.2.1
+appdirs==1.4.4
+click==8.2.1
+click-default-group==1.2.4
+colorama==0.4.6
+janus==1.2.0
+loguru==0.7.3
+numpy==2.3.2
+pefile==2023.2.7
+Pymem==1.13.1
+regex==2024.11.6
+trimesh==4.8.1
+win32_setctime==1.2.0
+wizwalker @ git+https://codeberg.org/notfaj/wizwalker.git@efcdcf0b91b623a4df6afbfc7d88da4856d6d0d1
