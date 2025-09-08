@@ -3,7 +3,7 @@ import keyboard
 from wizwalker.client_handler import ClientHandler
 from wizwalker.constants import Keycode
 from teleporter import teleport_to_quest_position
-from combat_main import combat_main
+from combat import combat_main
 
 async def main():
     client_handler = ClientHandler()
