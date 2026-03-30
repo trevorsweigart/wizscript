@@ -2,7 +2,7 @@
 Auto Combat — monitors for battles and handles them automatically.
 
 Runs as an independent loop that checks if the player is in battle,
-waits for the planning phase, and then selects and casts the best spell.
+waits for the planning phase, and then runs the combat decision tree.
 """
 
 import asyncio
@@ -71,16 +71,16 @@ class AutoCombat:
             while self._running:
                 try:
                     if await client.in_battle():
-                        self._emit_status("In battle — selecting spell...")
+                        self._emit_status("In battle — analyzing hand...")
                         async with client.mouse_handler:
-                            result = await combat_main(client)
+                            result, description = await combat_main(client)
 
                         if result == "acted":
-                            self._emit_status("Spell cast — waiting for round...")
+                            self._emit_status(f"⚔ {description}")
                             # Wait for the round to play out
                             await asyncio.sleep(2.0)
                         elif result == "skipped":
-                            self._emit_status("No valid spell — waiting...")
+                            self._emit_status(f"⏸ {description}")
                             await asyncio.sleep(1.0)
                         else:
                             # "waiting" — not in planning phase yet

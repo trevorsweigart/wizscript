@@ -55,7 +55,7 @@ class App:
 
         # Tkinter root
         self._root = tk.Tk()
-        self._root.title("WizTeleport")
+        self._root.title("WizScript")
         self._root.geometry("520x720")
         self._root.minsize(480, 660)
         self._root.resizable(True, True)
