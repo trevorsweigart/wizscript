@@ -1156,6 +1156,30 @@ async def execute_action(
 
     elif action == Action.FLEE:
         await combat_handler.flee_button()
+        # Handle the "Are you sure?" confirmation dialog
+        await asyncio.sleep(0.5)
+        try:
+            client = combat_handler.client
+            confirm_windows = await client.root_window.get_windows_with_name(
+                "MessageBoxModalWindow"
+            )
+            if confirm_windows:
+                confirm_window = confirm_windows[0]
+                if await confirm_window.is_visible():
+                    yes_buttons = await confirm_window.get_windows_with_name(
+                        "centerButton"
+                    )
+                    if yes_buttons:
+                        await client.mouse_handler.click_window(yes_buttons[0])
+                        log.info("Confirmed flee dialog")
+                    else:
+                        log.warning("Flee confirm dialog found but no centerButton")
+                else:
+                    log.debug("Flee confirm dialog not visible")
+            else:
+                log.debug("No flee confirm dialog found")
+        except Exception as e:
+            log.warning(f"Error handling flee confirmation: {e}")
         return "Fled combat"
 
     return "Unknown action"
