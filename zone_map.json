@@ -1,0 +1,468 @@
+{
+  "version": 1,
+  "zones": {
+    "WizardCity/Interiors/WC_Headmistress_House": {
+      "first_seen": "2026-05-24T04:22:47",
+      "last_seen": "2026-05-24T05:52:09",
+      "visit_count": 10,
+      "has_health_wisps": false,
+      "has_mana_wisps": false
+    },
+    "WizardCity/WC_Streets/WC_Unicorn": {
+      "first_seen": "2026-05-24T04:23:21",
+      "last_seen": "2026-05-24T05:52:09",
+      "visit_count": 22,
+      "has_health_wisps": true,
+      "has_mana_wisps": true
+    },
+    "WizardCity/WC_Hub": {
+      "first_seen": "2026-05-24T04:23:32",
+      "last_seen": "2026-05-24T05:50:55",
+      "visit_count": 11,
+      "has_health_wisps": false,
+      "has_mana_wisps": true
+    },
+    "WizardCity/WC_Streets/Interiors/WC_Unicorn_HedgeMaze": {
+      "first_seen": "2026-05-24T05:09:40",
+      "last_seen": "2026-05-24T05:43:14",
+      "visit_count": 9,
+      "has_health_wisps": false,
+      "has_mana_wisps": false
+    },
+    "WizardCity/WC_Streets/Interiors/WC_Unicorn_T2": {
+      "first_seen": "2026-05-24T05:14:18",
+      "last_seen": "2026-05-24T05:44:59",
+      "visit_count": 4,
+      "has_health_wisps": false,
+      "has_mana_wisps": false
+    },
+    "WizardCity/Interiors/WC_Library": {
+      "first_seen": "2026-05-24T05:48:17",
+      "last_seen": "2026-05-24T05:48:54",
+      "visit_count": 1,
+      "has_health_wisps": false,
+      "has_mana_wisps": false
+    },
+    "WizardCity/WC_Ravenwood_Lite": {
+      "first_seen": "2026-05-24T05:49:23",
+      "last_seen": "2026-05-24T05:49:36",
+      "visit_count": 1,
+      "has_health_wisps": false,
+      "has_mana_wisps": false
+    },
+    "WizardCity/Interiors/WC_SchoolFire": {
+      "first_seen": "2026-05-24T05:49:36",
+      "last_seen": "2026-05-24T05:49:54",
+      "visit_count": 1,
+      "has_health_wisps": false,
+      "has_mana_wisps": false
+    },
+    "WizardCity/WC_Ravenwood": {
+      "first_seen": "2026-05-24T05:49:54",
+      "last_seen": "2026-05-24T05:50:04",
+      "visit_count": 1,
+      "has_health_wisps": false,
+      "has_mana_wisps": true
+    },
+    "WizardCity/WC_Shop_Area": {
+      "first_seen": "2026-05-24T05:50:33",
+      "last_seen": "2026-05-24T05:50:50",
+      "visit_count": 2,
+      "has_health_wisps": false,
+      "has_mana_wisps": true
+    },
+    "WizardCity/WC_Streets/WC_OldeTown": {
+      "first_seen": "2026-05-24T05:50:39",
+      "last_seen": "2026-05-24T05:50:45",
+      "visit_count": 1,
+      "has_health_wisps": false,
+      "has_mana_wisps": true
+    }
+  },
+  "transitions": [
+    {
+      "from_zone": "WizardCity/Interiors/WC_Headmistress_House",
+      "to_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "from_pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "to_pos": [
+        -949.2542724609375,
+        9129.5556640625,
+        -341.43768310546875
+      ],
+      "count": 2,
+      "last_seen": "2026-05-24T05:29:35"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "to_zone": "WizardCity/WC_Hub",
+      "from_pos": [
+        -9.06424331665039,
+        -1148.446044921875,
+        18.498079299926758
+      ],
+      "to_pos": [
+        6099.1279296875,
+        5063.8310546875,
+        -27.9097900390625
+      ],
+      "count": 3,
+      "last_seen": "2026-05-24T05:48:13"
+    },
+    {
+      "from_zone": "WizardCity/WC_Hub",
+      "to_zone": "WizardCity/Interiors/WC_Headmistress_House",
+      "from_pos": [
+        -952.7764892578125,
+        -2487.681884765625,
+        121.62069702148438
+      ],
+      "to_pos": [
+        -2.263153076171875,
+        -464.730712890625,
+        0.0
+      ],
+      "count": 4,
+      "last_seen": "2026-05-24T05:50:09"
+    },
+    {
+      "from_zone": "WizardCity/WC_Hub",
+      "to_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "from_pos": [
+        6277.72802734375,
+        5486.873046875,
+        -30.473169326782227
+      ],
+      "to_pos": [
+        -87.59520721435547,
+        -533.3090209960938,
+        0.031005859375
+      ],
+      "count": 3,
+      "last_seen": "2026-05-24T05:50:55"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "to_zone": "WizardCity/WC_Streets/Interiors/WC_Unicorn_HedgeMaze",
+      "from_pos": [
+        -29537.9609375,
+        19501.880859375,
+        161.27810668945312
+      ],
+      "to_pos": [
+        600.7432250976562,
+        -3195.19189453125,
+        162.33999633789062
+      ],
+      "count": 4,
+      "last_seen": "2026-05-24T05:41:14"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/Interiors/WC_Unicorn_HedgeMaze",
+      "to_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "from_pos": [
+        607.3590698242188,
+        -3574.85107421875,
+        196.2375030517578
+      ],
+      "to_pos": [
+        -29200.7890625,
+        19500.009765625,
+        162.430908203125
+      ],
+      "count": 6,
+      "last_seen": "2026-05-24T05:40:44"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "to_zone": "WizardCity/WC_Streets/Interiors/WC_Unicorn_HedgeMaze",
+      "from_pos": [
+        601.0341796875,
+        303.4966125488281,
+        86.17138671875
+      ],
+      "to_pos": [
+        601.0341796875,
+        305.29656982421875,
+        -69.9998779296875
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:10:30"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "to_zone": "WizardCity/WC_Streets/Interiors/WC_Unicorn_T2",
+      "from_pos": [
+        -16493.740234375,
+        19082.099609375,
+        29.125499725341797
+      ],
+      "to_pos": [
+        -25.90089988708496,
+        -1154.27294921875,
+        1.617919921875
+      ],
+      "count": 2,
+      "last_seen": "2026-05-24T05:44:59"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/Interiors/WC_Unicorn_T2",
+      "to_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "from_pos": [
+        4.493728160858154,
+        -1241.6259765625,
+        10.455690383911133
+      ],
+      "to_pos": [
+        -16502.669921875,
+        18767.720703125,
+        30.00628662109375
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:27:44"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "to_zone": "WizardCity/WC_Hub",
+      "from_pos": [
+        -18692.80078125,
+        13147.2373046875,
+        0.02855200693011284
+      ],
+      "to_pos": [
+        -38.84381103515625,
+        720.9722290039062,
+        -27.992340087890625
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:35:36"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "to_zone": "WizardCity/WC_Streets/Interiors/WC_Unicorn_HedgeMaze",
+      "from_pos": [
+        605.9531860351562,
+        1196.47998046875,
+        180.3094024658203
+      ],
+      "to_pos": [
+        605.62548828125,
+        1239.07861328125,
+        -69.99990844726562
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:38:22"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/Interiors/WC_Unicorn_HedgeMaze",
+      "to_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "from_pos": [
+        607.3590698242188,
+        -3574.85107421875,
+        196.2375030517578
+      ],
+      "to_pos": [
+        -28273.966796875,
+        19518.453125,
+        30.031036376953125
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:43:14"
+    },
+    {
+      "from_zone": "WizardCity/WC_Hub",
+      "to_zone": "WizardCity/Interiors/WC_Library",
+      "from_pos": [
+        9654.9658203125,
+        2182.2958984375,
+        195.591796875
+      ],
+      "to_pos": [
+        -3.7570838928222656,
+        -373.2652893066406,
+        95.74224853515625
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:48:17"
+    },
+    {
+      "from_zone": "WizardCity/Interiors/WC_Library",
+      "to_zone": "WizardCity/WC_Hub",
+      "from_pos": [
+        -3.7889389991760254,
+        -597.4188842773438,
+        141.10279846191406
+      ],
+      "to_pos": [
+        9179.7646484375,
+        1950.8719482421875,
+        176.04669189453125
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:48:54"
+    },
+    {
+      "from_zone": "WizardCity/Interiors/WC_Headmistress_House",
+      "to_zone": "WizardCity/WC_Hub",
+      "from_pos": [
+        3.541260004043579,
+        -737.9520874023438,
+        0.0
+      ],
+      "to_pos": [
+        -488.7184143066406,
+        -2421.488037109375,
+        51.6197509765625
+      ],
+      "count": 2,
+      "last_seen": "2026-05-24T05:50:29"
+    },
+    {
+      "from_zone": "WizardCity/WC_Hub",
+      "to_zone": "WizardCity/WC_Ravenwood_Lite",
+      "from_pos": [
+        -44.92462921142578,
+        1854.281982421875,
+        -30.48468017578125
+      ],
+      "to_pos": [
+        -5.628325939178467,
+        -1531.4510498046875,
+        -44.87297058105469
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:49:23"
+    },
+    {
+      "from_zone": "WizardCity/WC_Ravenwood_Lite",
+      "to_zone": "WizardCity/Interiors/WC_SchoolFire",
+      "from_pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "to_pos": [
+        -135.74159240722656,
+        -0.9598687291145325,
+        0.0
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:49:36"
+    },
+    {
+      "from_zone": "WizardCity/Interiors/WC_SchoolFire",
+      "to_zone": "WizardCity/WC_Ravenwood",
+      "from_pos": [
+        -247.9197998046875,
+        -12.224120140075684,
+        34.08930969238281
+      ],
+      "to_pos": [
+        1616.2139892578125,
+        5983.3427734375,
+        1.713958740234375
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:49:54"
+    },
+    {
+      "from_zone": "WizardCity/WC_Ravenwood",
+      "to_zone": "WizardCity/WC_Hub",
+      "from_pos": [
+        21.56053924560547,
+        -2170.2119140625,
+        -104.96499633789062
+      ],
+      "to_pos": [
+        -86.5773696899414,
+        1414.7139892578125,
+        -27.992340087890625
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:50:04"
+    },
+    {
+      "from_zone": "WizardCity/WC_Hub",
+      "to_zone": "WizardCity/WC_Shop_Area",
+      "from_pos": [
+        1391.25,
+        -3649.947998046875,
+        -30.484149932861328
+      ],
+      "to_pos": [
+        -95.5573501586914,
+        -849.2841796875,
+        -29.363616943359375
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:50:33"
+    },
+    {
+      "from_zone": "WizardCity/WC_Shop_Area",
+      "to_zone": "WizardCity/WC_Streets/WC_OldeTown",
+      "from_pos": [
+        -6106.94580078125,
+        -3249.427001953125,
+        -30.477680206298828
+      ],
+      "to_pos": [
+        2467.175048828125,
+        200.66929626464844,
+        2.19921875
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:50:39"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_OldeTown",
+      "to_zone": "WizardCity/WC_Shop_Area",
+      "from_pos": [
+        3122.31298828125,
+        282.4657897949219,
+        29.9864501953125
+      ],
+      "to_pos": [
+        -5442.1318359375,
+        -3267.8291015625,
+        -29.36358642578125
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:50:45"
+    },
+    {
+      "from_zone": "WizardCity/WC_Shop_Area",
+      "to_zone": "WizardCity/WC_Hub",
+      "from_pos": [
+        -97.7442626953125,
+        -160.17230224609375,
+        14.451760292053223
+      ],
+      "to_pos": [
+        1349.4339599609375,
+        -3125.509033203125,
+        -27.992279052734375
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:50:50"
+    },
+    {
+      "from_zone": "WizardCity/WC_Streets/WC_Unicorn",
+      "to_zone": "WizardCity/Interiors/WC_Headmistress_House",
+      "from_pos": [
+        -23.125993728637695,
+        17.164752960205078,
+        0.0
+      ],
+      "to_pos": [
+        -22.39525604248047,
+        61.558738708496094,
+        0.0
+      ],
+      "count": 1,
+      "last_seen": "2026-05-24T05:52:09"
+    }
+  ]
+}

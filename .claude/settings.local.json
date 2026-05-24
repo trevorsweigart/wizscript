@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep -l -i \"wisp\\\\|health.orb\\\\|HealWisp\\\\|hpwisp\")",
+      "Bash(./.venv/Scripts/python.exe -m py_compile entities.py zone_mapper.py auto_healer.py auto_quester.py app.py gui/debug_panel.py)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:python.codetea.com)"
+    ]
+  }
+}

@@ -13,13 +13,25 @@ from gui.collapsible import CollapsiblePanel
 class AutoQuestPanel(CollapsiblePanel):
     """Panel with a toggle button, elapsed timer, and status label."""
 
-    def __init__(self, parent: tk.Widget, on_toggle: Callable[[bool], None]):
+    def __init__(
+        self,
+        parent: tk.Widget,
+        on_toggle: Callable[[bool], None],
+        on_heal_threshold_change: Callable[[float], None] = None,
+        on_mana_threshold_change: Callable[[float], None] = None,
+        initial_heal_pct: float = 50.0,
+        initial_mana_pct: float = 50.0,
+    ):
         super().__init__(parent, title="Auto Quest")
 
         self._on_toggle = on_toggle
+        self._on_heal_threshold_change = on_heal_threshold_change
+        self._on_mana_threshold_change = on_mana_threshold_change
         self._enabled = False
         self._start_time: float = 0.0
         self._timer_id = None
+        self._initial_heal_pct = initial_heal_pct
+        self._initial_mana_pct = initial_mana_pct
 
         self._build_ui()
 
@@ -35,6 +47,36 @@ class AutoQuestPanel(CollapsiblePanel):
         )
         self._toggle_btn.pack(side="left")
 
+        # Heal threshold: triggers auto-collect (health) when HP drops below this %
+        ttk.Label(top_frame, text="Heal at:").pack(side="left", padx=(10, 2))
+        self._heal_pct_var = tk.StringVar(value=str(int(self._initial_heal_pct)))
+        self._heal_spinbox = ttk.Spinbox(
+            top_frame,
+            from_=0, to=100, increment=5,
+            width=4,
+            textvariable=self._heal_pct_var,
+            command=self._handle_heal_threshold_change,
+        )
+        self._heal_spinbox.pack(side="left")
+        self._heal_spinbox.bind("<FocusOut>", lambda _e: self._handle_heal_threshold_change())
+        self._heal_spinbox.bind("<Return>", lambda _e: self._handle_heal_threshold_change())
+        ttk.Label(top_frame, text="%").pack(side="left", padx=(1, 0))
+
+        # Mana threshold: triggers auto-collect (mana) when mana drops below this %
+        ttk.Label(top_frame, text="Mana at:").pack(side="left", padx=(8, 2))
+        self._mana_pct_var = tk.StringVar(value=str(int(self._initial_mana_pct)))
+        self._mana_spinbox = ttk.Spinbox(
+            top_frame,
+            from_=0, to=100, increment=5,
+            width=4,
+            textvariable=self._mana_pct_var,
+            command=self._handle_mana_threshold_change,
+        )
+        self._mana_spinbox.pack(side="left")
+        self._mana_spinbox.bind("<FocusOut>", lambda _e: self._handle_mana_threshold_change())
+        self._mana_spinbox.bind("<Return>", lambda _e: self._handle_mana_threshold_change())
+        ttk.Label(top_frame, text="%").pack(side="left", padx=(1, 0))
+
         self._timer_var = tk.StringVar(value="")
         ttk.Label(top_frame, textvariable=self._timer_var,
                   font=("Consolas", 10), foreground="#8cb4ff",
@@ -45,6 +87,29 @@ class AutoQuestPanel(CollapsiblePanel):
                   style="Status.TLabel").pack(side="left", padx=(12, 0))
 
         c.columnconfigure(0, weight=1)
+
+    def _handle_heal_threshold_change(self):
+        if not self._on_heal_threshold_change:
+            return
+        try:
+            value = float(self._heal_pct_var.get())
+        except ValueError:
+            return
+        value = max(0.0, min(100.0, value))
+        # Normalize displayed value if it was clamped
+        self._heal_pct_var.set(str(int(value)))
+        self._on_heal_threshold_change(value)
+
+    def _handle_mana_threshold_change(self):
+        if not self._on_mana_threshold_change:
+            return
+        try:
+            value = float(self._mana_pct_var.get())
+        except ValueError:
+            return
+        value = max(0.0, min(100.0, value))
+        self._mana_pct_var.set(str(int(value)))
+        self._on_mana_threshold_change(value)
 
     def _handle_toggle(self):
         self._enabled = not self._enabled

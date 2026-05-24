@@ -4,7 +4,7 @@ Teleport Panel — UI controls for coordinate teleportation.
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable
+from typing import Callable, List
 
 from gui.collapsible import CollapsiblePanel
 
@@ -17,11 +17,15 @@ class TeleportPanel(CollapsiblePanel):
         parent: tk.Widget,
         on_teleport: Callable[[str, float, float, float], None],
         on_teleport_quest: Callable,
+        on_teleport_zone: Callable[[str], None] = None,
+        on_get_known_zones: Callable[[], List[str]] = None,
     ):
         super().__init__(parent, title="Teleport")
 
         self._on_teleport = on_teleport
         self._on_teleport_quest = on_teleport_quest
+        self._on_teleport_zone = on_teleport_zone
+        self._on_get_known_zones = on_get_known_zones
 
         self._build_ui()
 
@@ -61,11 +65,50 @@ class TeleportPanel(CollapsiblePanel):
         ttk.Button(btn_frame, text="Teleport to Quest", style="Success.TButton",
                    command=self._handle_quest_teleport).pack(side="left")
 
-        # Row 3 — Status
+        # Row 3 — Zone teleport (dropdown of mapped zones)
+        zone_frame = ttk.Frame(c)
+        zone_frame.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+
+        ttk.Label(zone_frame, text="Zone:").pack(side="left", padx=(0, 4))
+
+        self._zone_var = tk.StringVar(value="")
+        self._zone_combo = ttk.Combobox(
+            zone_frame,
+            textvariable=self._zone_var,
+            state="readonly",
+            width=32,
+            postcommand=self._refresh_known_zones,
+        )
+        self._zone_combo.pack(side="left", padx=(0, 4))
+        # Populate once at construction
+        self._refresh_known_zones()
+
+        ttk.Button(
+            zone_frame, text="Teleport to Zone",
+            style="Success.TButton",
+            command=self._handle_zone_teleport,
+        ).pack(side="left")
+
+        # Row 4 — Status
         self._status_var = tk.StringVar(value="")
         ttk.Label(c, textvariable=self._status_var, style="Status.TLabel").grid(
-            row=3, column=0, sticky="w", pady=(4, 0),
+            row=4, column=0, sticky="w", pady=(4, 0),
         )
+
+    def _refresh_known_zones(self):
+        if not self._on_get_known_zones:
+            return
+        zones = self._on_get_known_zones() or []
+        self._zone_combo["values"] = zones
+
+    def _handle_zone_teleport(self):
+        if not self._on_teleport_zone:
+            return
+        target = self._zone_var.get().strip()
+        if not target:
+            self.set_status("Pick a zone from the dropdown first")
+            return
+        self._on_teleport_zone(target)
 
     def _handle_teleport(self):
         try:
