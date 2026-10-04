@@ -16,6 +16,8 @@ from jev_credentials import load_api_key
 
 COMBAT_PROMPT = """You are an expert Wizard101 player making combat decisions.
 Choose the next available action that best works toward winning this fight.
+Use each combatant's health.current and health.maximum for live combat health.
+Raw stats.current_hitpoints can retain a creature's initial HP after damage.
 Consider current and maximum health and mana, regular/power/shadow/school pips,
 schools and masteries, accuracy and fizzle risk, damage, resistance, piercing,
 critical/block, healing, blades, traps, shields, absorbs, auras, globals, overtime,

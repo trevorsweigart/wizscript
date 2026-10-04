@@ -48,6 +48,56 @@ The report should show `ok`, `frozen`, `graph_rendered`, and
 `persistence_verified` as `true`. This checks startup and bundled dependencies;
 game connection and automation require a running Wizard101 client.
 
+## Auto questing
+
+Auto Quest follows accepted main quests, identified by the game's mainline
+metadata and the stars in quest cards. It disables Quest Finder while tracking
+a main quest and selects the quest through the journal when tracking changes.
+For a Talk To objective, it matches the HUD's NPC name to a loaded game entity
+before using the arrow coordinates, which can incorrectly point at a door.
+It approaches away from neighboring NPCs and checks the interaction prompt's
+name so a nearby quest giver does not receive the intended conversation.
+Ground collection objectives match the active main quest's object tags or HUD
+item name to loaded entities, including static objects without actor bodies.
+When an object is outside the loaded area, the search follows the zone's
+walkable map and polls for newly loaded objects. It walks through a pickup
+and retries its matching interaction prompt until the objective count advances.
+Missing arrow coordinates never cause a teleport to the world origin.
+Defeat objectives match nearby creatures by the HUD name, sample their movement,
+approach ahead of their path, and walk into them. Objectives in another
+zone use their destination metadata, including returning to a boss after a loss.
+For four-player entrance sigils, the loop uses the loaded model's position,
+rotation and scale to walk onto an entry pad, then holds still after interacting
+so the entry countdown can finish before navigation resumes.
+
+Dialog advances through recognized buttons. Quest acceptance requires visible
+main quest stars. In NPC choice menus it matches an accepted main quest title
+or inspects each unvisited offer, declining unstarred side quests. After a hand-in leaves no
+accepted main quest, the loop checks
+the last NPC for the next offer before moving away. Unknown dialog choices or
+unavailable quest metadata leave the loop waiting for readable information.
+Start Jev Combat separately for battle objectives. Disconnect using the app's
+button when testing finishes.
+Unavailable health and mana sources stay suppressed across collection handoffs
+until the zone changes, so two unavailable resources do not repeatedly restart
+each other.
+
+**Debug → Print Game State** also exports `quest_snapshot.json` in the app's
+data directory, including current quest metadata, loaded entity locations,
+visible UI controls, trained spell IDs, and deck/card metadata when displayed.
+
+School visits check newly reached levels using recorded routes and loaded
+teacher positions. Training requires a displayed cost of zero, a matching
+player school, and confirmation that the learned spell changed while training
+points stayed unchanged. A known return route is required before a visit.
+Classrooms without a recorded route are deferred until that route is learned.
+
+Deck management selects from learned cards by effects and pip cost: reliable
+school attacks, a stronger finisher, damage buffs, and an emergency heal. It
+checks each UI edit against the resulting equipped deck and stops editing if
+the game does not confirm the expected change. Jev still chooses every combat
+action.
+
 ## Jev combat
 
 Auto Combat now sends fresh battle facts to Jev using TypeSafe's

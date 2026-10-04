@@ -8,6 +8,7 @@ mechanism that disables itself if a teleport fails repeatedly (player snaps back
 import asyncio
 import math
 import time
+import logging
 from collections import deque
 from typing import Callable, Optional
 
@@ -16,9 +17,20 @@ from wizwalker.constants import Keycode
 from wizwalker.utils import XYZ
 
 from game_info import fetch_position, fetch_quest_position
-from entities import detect_wisps_in_zone
+from entities import detect_wisps_in_zone, list_nearby_entities
 from zone_mapper import ZoneMapper
 from zone_walker import walk_zone_path
+from quest_state import safe_read, visible_ui, quest_entries
+from wizwalker.memory.memory_objects.enums import ObjectType
+from quest_navigation import MainQuestNavigator, plain_text
+from quest_dialog import advance_dialog, DialogNavigator
+from quest_npc import approach_point, prompt_name
+from quest_objects import active_usage_goal, matches_object, defeat_target, sigil_approach
+from quest_mobs import approach_enemy
+from spell_management import SchoolTrainer, DeckManager, SchoolVisits
+from quest_search import ZoneSearch
+
+log = logging.getLogger(__name__)
 
 # How close (in units) two positions must be to count as "same location"
 SNAP_BACK_THRESHOLD = 50.0
@@ -104,6 +116,26 @@ class AutoQuester:
         # Suppressed from re-requesting until the next zone change, which
         # gives the player a chance to reach a zone that does have wisps.
         self._unavailable_modes: set = set()
+        self._quest_navigator = MainQuestNavigator(self._emit_status)
+        self._dialog_navigator = DialogNavigator()
+        self._school_trainer = SchoolTrainer(self._emit_status)
+        self._deck_manager = DeckManager(self._emit_status)
+        self._school_visits = SchoolVisits(self._emit_status)
+        self._last_dialog_point = None
+        self._followup_attempts = 0
+        self._was_in_dialog = False
+        self._quest_client = None
+        self._expected_talk_name = None
+        self._object_attempts = {}
+        self._object_progress = {}
+        self._object_search = {}
+        self._zone_search = ZoneSearch()
+        self._search_visited = {}
+        self._entry_attempts = {}
+        self._entry_attempt_key = None
+        self._entry_walk_target = None
+        self._npc_walk_target = None
+        self._talk_attempts = {}
 
     @property
     def is_running(self) -> bool:
@@ -150,6 +182,9 @@ class AutoQuester:
         self._zone_mapper = mapper
 
     def _emit_status(self, msg: str):
+        if msg != getattr(self, "_last_status", None):
+            log.info(msg)
+            self._last_status = msg
         if self._on_status:
             self._on_status(msg)
 
@@ -162,15 +197,32 @@ class AutoQuester:
         if self._running:
             return
         self._running = True
+        if self._quest_client is not client:
+            self._quest_client = client
+            self._last_known_zone = None
+            self._unavailable_modes.clear()
+            self._last_dialog_point = None
+            self._followup_attempts = 0
+            self._was_in_dialog = False
+            self._quest_navigator = MainQuestNavigator(self._emit_status)
+            self._school_trainer = SchoolTrainer(self._emit_status)
+            self._deck_manager = DeckManager(self._emit_status)
+            self._school_visits = SchoolVisits(self._emit_status)
         self._consecutive_failures = 0
         self._resource_requested = False
         self._pending_transition = None
-        self._last_known_zone = None
         self._last_goal_id = None
         self._stuck_timer_start = None
         self._objective_history.clear()
         self._in_recovery = False
-        self._unavailable_modes.clear()
+        self._object_attempts.clear()
+        self._object_progress.clear()
+        self._object_search.clear()
+        self._search_visited.clear()
+        self._entry_attempts.clear()
+        self._entry_attempt_key = None
+        self._entry_walk_target = None
+        self._talk_attempts.clear()
         self._task = asyncio.run_coroutine_threadsafe(
             self._quest_loop(client), loop
         )
@@ -185,12 +237,10 @@ class AutoQuester:
         self._consecutive_failures = 0
         self._resource_requested = False
         self._pending_transition = None
-        self._last_known_zone = None
         self._last_goal_id = None
         self._stuck_timer_start = None
         self._objective_history.clear()
         self._in_recovery = False
-        self._unavailable_modes.clear()
         self._emit_status("Auto-quest stopped")
 
     # ------------------------------------------------------------------
@@ -231,6 +281,23 @@ class AutoQuester:
                         self._emit_status("In battle — waiting...")
                         await asyncio.sleep(1.0)
 
+                    elif await self._school_trainer.step(client, await visible_ui(client)):
+                        self._reset_stuck_timer()
+                        await asyncio.sleep(TICK_DELAY)
+
+                    elif await self._school_visits.step(client, await visible_ui(client), self._zone_mapper,
+                            lambda target, current: self._try_teleport(client, target, current),
+                            lambda: self._running, self._school_trainer):
+                        # School trips use already recorded routes and the
+                        # Commons shortcut, not the current quest door.
+                        self._pending_transition = None
+                        self._reset_stuck_timer()
+                        await asyncio.sleep(TICK_DELAY)
+
+                    elif not in_dialog and await self._deck_manager.step(client, await visible_ui(client)):
+                        self._reset_stuck_timer()
+                        await asyncio.sleep(TICK_DELAY)
+
                     elif (mode := await self._should_request_resource(client)) is not None:
                         # HP or mana below threshold — hand off to auto-collect
                         self._reset_stuck_timer()
@@ -244,24 +311,58 @@ class AutoQuester:
                     elif in_dialog:
                         # Advance dialog (counts as progress, not stuck)
                         self._reset_stuck_timer()
-                        self._emit_status("In dialog — advancing...")
-                        await client.send_key(Keycode.SPACEBAR, 0)
+                        if not self._was_in_dialog:
+                            self._dialog_navigator.begin()
+                            pos = await fetch_position(client)
+                            zone = await safe_read(client.zone_name)
+                            if pos is not None and zone:
+                                self._last_dialog_point = (zone, pos)
+                        self._was_in_dialog = True
+                        await advance_dialog(client, self._emit_status, self._dialog_navigator)
                         await asyncio.sleep(TICK_DELAY)
 
-                    elif self._is_stuck() and not self._in_recovery:
-                        # Quest objective hasn't changed for too long — try to
-                        # recover by revisiting recent advancement points.
-                        recovered = await self._attempt_recovery(client)
-                        if not recovered:
-                            self._emit_status(
-                                "Recovery failed after all attempts — auto-quest disabled"
-                            )
-                            self._running = False
-                            if self._on_stopped:
-                                self._on_stopped()
-                            break
-
                     else:
+                        self._was_in_dialog = False
+                        tracking = await self._quest_navigator.ensure_tracked(client)
+                        if tracking == "ready":
+                            self._followup_attempts = 0
+                        if tracking in ("changed", "unavailable"):
+                            await asyncio.sleep(0.4)
+                            continue
+                        if tracking == "missing":
+                            # A hand-in can close dialog before the next offer
+                            # opens. Revisit the last NPC before considering any
+                            # Finder target; do not follow stale world coordinates.
+                            if self._last_dialog_point is not None and self._followup_attempts < 4:
+                                zone, pos = self._last_dialog_point
+                                if await safe_read(client.zone_name) == zone:
+                                    self._followup_attempts += 1
+                                    current = await fetch_position(client)
+                                    if current and _distance(current, pos) > 150:
+                                        await self._try_teleport(client, pos, current)
+                                    self._emit_status("No main quest — checking the last NPC for the next offer")
+                                    await self._nudge_and_interact(client)
+                                    await asyncio.sleep(0.6)
+                                    continue
+                            # Initial characters may only have Finder. Allow
+                            # approaching a named NPC actually loaded here; never
+                            # teleport toward Finder's unverified arrow/exit.
+                            if self._last_dialog_point is not None or await self._talk_target(client) is None:
+                                self._emit_status("No accepted main quest — waiting for a main quest offer")
+                                await asyncio.sleep(1)
+                                continue
+                        if tracking == "ready" and await self._collect_objective(client):
+                            await asyncio.sleep(0.5)
+                            continue
+                        if tracking == "ready" and self._is_stuck() and not self._in_recovery:
+                            recovered = await self._attempt_recovery(client)
+                            if not recovered:
+                                self._emit_status("Recovery failed after all attempts — auto-quest disabled")
+                                self._running = False
+                                if self._on_stopped:
+                                    self._on_stopped()
+                                break
+                            continue
                         # Not in battle, not in dialog → teleport to quest
                         result = await self._teleport_to_quest_safe(client)
 
@@ -282,7 +383,10 @@ class AutoQuester:
                             # Reset failure counter on any successful teleport
                             self._consecutive_failures = 0
                             # Try interacting with NPC after teleport
-                            await self._try_interact(client)
+                            if self._entry_attempt_key is not None or self._npc_walk_target is not None:
+                                await self._nudge_and_interact(client)
+                            else:
+                                await self._try_interact(client)
                         elif result == "skipped":
                             # Already at quest objective — nudge and interact
                             await self._nudge_and_interact(client)
@@ -488,7 +592,8 @@ class AutoQuester:
                         in_dialog = False
                     if not in_dialog:
                         break
-                    await client.send_key(Keycode.SPACEBAR, 0)
+                    if not await advance_dialog(client, self._emit_status):
+                        break
                     await asyncio.sleep(0.4)
 
                 # Did the goal advance?
@@ -599,9 +704,14 @@ class AutoQuester:
 
     async def _try_interact(self, client: Client):
         """Press X to interact, then wait briefly to see if dialog opens."""
+        if not await self._matches_interaction(client):
+            return
+        transition = await self._transition_destination(client)
         self._emit_status("At quest objective — interacting...")
-        await client.send_key(Keycode.X, 0)
+        await client.send_key(Keycode.X, 0.02 if transition else 0.1)
         await asyncio.sleep(0.3)
+        if transition:
+            await self._wait_for_transition(client, *transition)
 
         # Check if dialog opened
         try:
@@ -619,15 +729,31 @@ class AutoQuester:
         """
         self._emit_status("Near objective — stepping forward...")
 
-        # Tap W to move a step forward, then S to step back
-        await client.send_key(Keycode.W, 0.1)
-        await asyncio.sleep(0.15)
-        await client.send_key(Keycode.S, 0.1)
-        await asyncio.sleep(0.15)
+        if self._entry_attempt_key and self._entry_walk_target:
+            target = self._entry_walk_target
+            await asyncio.wait_for(client.goto(target.x, target.y), timeout=4)
+            await asyncio.sleep(1.0)
+            log.debug("Entrance movement target=%s actual=%s npc_range=%s", target, await fetch_position(client), await safe_read(client.is_in_npc_range))
+        elif self._npc_walk_target:
+            target = self._npc_walk_target
+            await asyncio.wait_for(client.goto(target.x, target.y), timeout=3)
+            await asyncio.sleep(0.3)
+        else:
+            await client.send_key(Keycode.W, 0.1)
+            await asyncio.sleep(0.15)
+            await client.send_key(Keycode.S, 0.1)
+            await asyncio.sleep(0.15)
 
+        if not await self._matches_interaction(client):
+            return
+        transition = await self._transition_destination(client)
         # Press X to interact
-        await client.send_key(Keycode.X, 0)
+        # Wizwalker's held-key helper repeats keydown every 50 ms. A second
+        # X cancels sigil entry, so send a single short press for transitions.
+        await client.send_key(Keycode.X, 0.02 if transition else 0.1)
         await asyncio.sleep(0.3)
+        if transition:
+            await self._wait_for_transition(client, *transition)
 
         # Check if dialog opened or we entered battle
         try:
@@ -640,12 +766,246 @@ class AutoQuester:
         except Exception:
             pass
 
+    async def _transition_destination(self, client):
+        ui = await visible_ui(client)
+        labels = [plain_text(n.text).casefold() for n in ui.walk() if n.name == "txtGoalName"] if ui else []
+        if len(labels) != 1:
+            return None
+        if (self._expected_talk_name and labels[0].startswith("talk to ") and
+                self._expected_talk_name.casefold() in labels[0]):
+            return None
+        self._expected_talk_name = None
+        active = await safe_read(client.quest_id)
+        zone = await safe_read(client.zone_name)
+        quests = await quest_entries(client)
+        destinations = {g.destination for q in quests or [] if q.id == active and q.mainline is True
+                        for g in q.goals if g.destination and g.destination != zone
+                        and ((plain_text(g.text).strip() and labels[0].startswith(plain_text(g.text).strip().casefold()))
+                             or (g.kind == "waypoint" and labels[0].startswith("go to ")))}
+        return (zone, destinations.pop()) if zone and len(destinations) == 1 else None
+
+    async def _wait_for_transition(self, client, initial_zone, destination):
+        # Entry sigils count down after X. More movement/X presses cancel that
+        # countdown, so hold still while observing the actual zone transition.
+        key = self._entry_attempt_key
+        self._emit_status(f"Waiting for entry to {destination}")
+        deadline = time.monotonic() + 15
+        while self._running and time.monotonic() < deadline:
+            self._reset_stuck_timer()
+            if (await safe_read(client.zone_name) != initial_zone or await self._is_loading(client)
+                    or await safe_read(client.is_in_dialog, False) or await safe_read(client.in_battle, False)):
+                return
+            await asyncio.sleep(0.5)
+        if key:
+            self._entry_attempts[key] = self._entry_attempts.get(key, 0) + 1
+
+    async def _matches_interaction(self, client):
+        if self._expected_talk_name:
+            actual = prompt_name(await visible_ui(client))
+            if not actual:
+                self._emit_status(f"Waiting for the interaction prompt for {self._expected_talk_name}")
+                return False
+            if actual.casefold() != self._expected_talk_name.casefold():
+                self._emit_status(f"Adjusting NPC approach: prompt is {actual}, objective is {self._expected_talk_name}")
+                return False
+        return True
+
     # ------------------------------------------------------------------
     # Safe teleport with snap-back detection
     # ------------------------------------------------------------------
 
     # Offsets to try on each axis when a direct teleport fails
     _OFFSET_DISTANCES = [50, 100, 200]
+
+    async def _collect_objective(self, client):
+        observed = active_usage_goal(await quest_entries(client), await safe_read(client.quest_id),
+                                     await visible_ui(client))
+        if observed is None:
+            return False
+        goal, label = observed
+        if goal.destination and goal.destination != await safe_read(client.zone_name):
+            return False  # Follow the zone entrance arrow first.
+        self._expected_talk_name = None
+        self._reset_stuck_timer()
+        rows = await list_nearby_entities(client)
+        candidates = [row for row in rows if matches_object(goal, label, row[1], row[2])]
+        if not candidates:
+            # Usage goals can omit their destination while the finder points
+            # to a zone exit. Preserve that navigation; only search locally
+            # when the finder has no usable location (as with scattered drops).
+            arrow = await fetch_quest_position(client)
+            if arrow and any((arrow.x, arrow.y, arrow.z)):
+                return False
+            return await self._search_object_area(client, goal, label)
+        key = (await safe_read(client.quest_id), goal.id, label)
+        progress_key = key[:2]
+        previous_label, previous_point, collected = self._object_progress.get(progress_key, (label, None, set()))
+        if previous_label != label and previous_point is not None:
+            collected.add(previous_point)
+        candidates = [row for row in candidates if (row[3].x, row[3].y, row[3].z) not in collected]
+        # Progress changes the HUD counter, so failed locations are forgotten
+        # only after a fresh objective observation, not on each teleport.
+        self._object_attempts = {key: self._object_attempts.get(key, {})}
+        attempts = self._object_attempts[key]
+        offsets = [(0, 0, 0)] + [(dx, dy, dz) for size in self._OFFSET_DISTANCES
+                    for dx, dy, dz in ((size, 0, 0), (-size, 0, 0), (0, size, 0),
+                                       (0, -size, 0), (0, 0, size), (0, 0, -size))]
+        candidates = [row for row in candidates if attempts.get((row[3].x, row[3].y, row[3].z), 0) < len(offsets)]
+        if not candidates:
+            return await self._search_object_area(client, goal, label)
+        _, _, name, target = candidates[0]
+        point = (target.x, target.y, target.z)
+        self._object_progress[progress_key] = (label, point, collected)
+        attempt = attempts.get(point, 0)
+        attempts[point] = attempt + 1
+        # Static origins may be inside collision geometry; use the same
+        # bounded surrounding-position search as arrow navigation.
+        dx, dy, dz = offsets[attempt]
+        target = XYZ(target.x + dx, target.y + dy, target.z + dz)
+        self._emit_status(f"Collecting quest object: {name or label}")
+        player = await fetch_position(client)
+        if player is None:
+            return True
+        result = await self._try_teleport(client, target, player)
+        log.info("Quest object approach %s at %s: %s", name, target, result)
+        if result == "failed" or await client.in_battle() or await self._is_loading(client):
+            return True
+        # A memory teleport alone does not always update the server's range
+        # trigger. Walk through the pickup, then observe its actual prompt.
+        try:
+            await asyncio.wait_for(client.goto(point[0], point[1]), 2)
+            await client.send_key(Keycode.W, 0.12)
+        except TimeoutError:
+            return True
+        for _ in range(3):
+            await asyncio.sleep(0.3)
+            if await self._is_loading(client) or await client.in_battle() or await client.is_in_dialog():
+                return True
+            observed = active_usage_goal(await quest_entries(client), await safe_read(client.quest_id),
+                                         await visible_ui(client))
+            if observed is None or observed[1] != label:
+                self._reset_stuck_timer()
+                return True
+            actual = prompt_name(await visible_ui(client))
+            close = await fetch_position(client)
+            matching = actual and matches_object(goal, label, "", actual)
+            unnamed = (not actual and close and _distance(close, XYZ(*point)) < 200
+                       and await safe_read(client.is_in_npc_range, False))
+            if matching or unnamed:
+                await client.send_key(Keycode.X, 0.04)
+                await asyncio.sleep(0.6)
+        return True
+
+    async def _search_object_area(self, client, goal, label):
+        """Expand the observed area instead of waiting for out-of-range objects."""
+        if await self._transition_destination(client):
+            return False
+        player = await fetch_position(client)
+        if player is None:
+            return False
+        key = (await safe_read(client.quest_id), goal.id, label)
+        origin, step = self._object_search.get(key, (player, 0))
+        self._object_search = {key: (origin, step + 1)}
+        arrow = await fetch_quest_position(client)
+        if (step == 0 and arrow and any((arrow.x, arrow.y, arrow.z))
+                and _distance(player, arrow) > 300):
+            target = arrow
+        else:
+            zone = await safe_read(client.zone_name)
+            visited = self._search_visited.get(key, [origin])
+            target = await self._zone_search.point(zone, origin, visited) if zone else None
+            if target is not None:
+                self._search_visited = {key: visited + [target]}
+                target = XYZ(target.x, target.y, target.z + 10)
+            else:
+                # Fallback for maps without navigation data; continue expanding
+                # rather than waiting indefinitely for a zero quest arrow.
+                ring = step // 8 + 1
+                dx, dy = ((1, 0), (1, 1), (0, 1), (-1, 1),
+                          (-1, 0), (-1, -1), (0, -1), (1, -1))[step % 8]
+                target = XYZ(origin.x + dx * ring * 450, origin.y + dy * ring * 450, origin.z)
+        self._emit_status(f"Searching beyond loaded objects: {label}")
+        result = await self._try_teleport(client, target, player)
+        if result != "failed" and not await self._is_loading(client) and not await client.in_battle():
+            try:
+                await asyncio.wait_for(client.goto(target.x + 80, target.y + 80), 2)
+            except TimeoutError:
+                pass
+            await asyncio.sleep(0.4)
+        return True
+
+    async def _talk_target(self, client):
+        """Resolve a Talk To HUD objective against actual NPCs, not door arrows.
+
+        The initial quest finder can point at an exit even while the requested
+        NPC is loaded in the room. No quest IDs, NPC names or coordinates are
+        prescribed here; the current HUD and object metadata identify the NPC.
+        """
+        ui = await visible_ui(client)
+        self._expected_talk_name = None
+        labels = [plain_text(node.text)
+                  for node in ui.walk() if node.name == "txtGoalName"] if ui else []
+        if len(labels) != 1 or not labels[0].casefold().startswith("talk to "):
+            log.debug("No unique Talk To HUD label: %r", labels)
+            return None
+        text = labels[0].casefold()[8:]
+        matches = []
+        neighbors = []
+        player = await fetch_position(client)
+        if player is None:
+            return None
+        for entity in await safe_read(client.get_base_entity_list, []):
+            template = await safe_read(entity.object_template)
+            if template is None:
+                continue
+            kind = await safe_read(template.object_type)
+            object_name = await safe_read(template.object_name, "")
+            # Some quest-givers are generic objects with NPC services. Player
+            # avatars have no NPC template display name and must be excluded.
+            if kind in (ObjectType.player, ObjectType.pet, ObjectType.door) or object_name == "Player Object":
+                continue
+            name = await safe_read(entity.display_name, "") or ""
+            normalized = name.casefold().strip()
+            if not normalized:
+                continue
+            body = await safe_read(entity.actor_body)
+            # Dormant quest stand-ins have template locations but no active
+            # actor body. Their display names are not usable interaction targets.
+            pos = await safe_read(body.position) if body else None
+            if pos is not None:
+                neighbors.append(pos)
+                if text == normalized or text.startswith(normalized + " in "):
+                    # Decorative stand-ins can share a quest giver's display
+                    # name. Require the actual NPC behavior before targeting.
+                    behavior = await safe_read(lambda: entity.fetch_npc_behavior_template())
+                    if behavior is None:
+                        log.debug("Ignoring noninteractive named object %s", object_name)
+                        continue
+                    key = (await safe_read(client.zone_name), await safe_read(lambda: client.goal_id()),
+                           name, pos.x, pos.y, pos.z)
+                    if self._talk_attempts.get(key, 0) >= 8:
+                        # A scripted stand-in can retain NPC behavior while
+                        # having no usable services. After a complete approach
+                        # ring, use the HUD route to locate the real quest giver.
+                        self._reset_stuck_timer()
+                        continue
+                    matches.append((_distance(player, pos), name, pos))
+        if not matches:
+            return None
+        _, name, pos = min(matches, key=lambda row: row[0])
+        self._expected_talk_name = name
+        self._emit_status(f"Talk objective — approaching {name}")
+        if (prompt_name(ui) or "").casefold() == name.casefold():
+            self._npc_walk_target = None
+            return player
+        key = (await safe_read(client.zone_name), await safe_read(lambda: client.goal_id()),
+               name, pos.x, pos.y, pos.z)
+        attempt = self._talk_attempts.get(key, 0)
+        if len(self._talk_attempts) > 32:
+            self._talk_attempts.clear()
+        self._talk_attempts[key] = attempt + 1
+        self._npc_walk_target = approach_point(player, pos, neighbors, 80, attempt)
+        return approach_point(player, pos, neighbors, 180, attempt)
 
     async def _teleport_to_quest_safe(self, client: Client) -> str:
         """
@@ -657,10 +1017,29 @@ class AutoQuester:
             "failed"  — all attempts (direct + offsets) failed
             "skipped" — skipped teleport (already close, no quest, etc.)
         """
-        quest_pos = await fetch_quest_position(client)
+        self._entry_attempt_key = None
+        self._entry_walk_target = None
+        self._npc_walk_target = None
+        quest_pos = await self._talk_target(client)
+        entry_key = None
         if quest_pos is None:
+            quest_pos = await self._entry_target(client)
+            if quest_pos is not None:
+                entry_key = self._entry_attempt_key
+        if quest_pos is None:
+            ui = await visible_ui(client)
+            if ui and any(n.name == "txtGoalName" and plain_text(n.text).casefold().startswith("defeat ") for n in ui.walk()):
+                enemy = defeat_target(await list_nearby_entities(client), ui)
+                if enemy is not None:
+                    if await approach_enemy(client, enemy[2], self._try_teleport,
+                                            self._emit_status, lambda: self._running):
+                        self._reset_stuck_timer()
+                        return "handled"
+        if quest_pos is None:
+            quest_pos = await fetch_quest_position(client)
+        if quest_pos is None or (quest_pos.x == 0 and quest_pos.y == 0 and quest_pos.z == 0):
             self._emit_status("No quest objective found")
-            return "skipped"
+            return "waiting"
 
         pre_pos = await fetch_position(client)
         if pre_pos is None:
@@ -710,7 +1089,50 @@ class AutoQuester:
 
         # All offsets exhausted
         self._emit_status("All offset attempts failed")
+        if entry_key:
+            self._entry_attempts[entry_key] = self._entry_attempts.get(entry_key, 0) + 1
+            return "waiting"
         return "failed"
+
+    async def _entry_target(self, client):
+        self._entry_attempt_key = None
+        self._entry_walk_target = None
+        if await self._transition_destination(client) is None:
+            return None
+        arrow = await fetch_quest_position(client)
+        if arrow is None or (arrow.x == 0 and arrow.y == 0 and arrow.z == 0):
+            return None
+        entrances = []
+        for entity in await safe_read(client.get_base_entity_list, []):
+            if "CountdownBehavior" not in await safe_read(entity.list_behavior_names, []):
+                continue
+            name = (await safe_read(entity.object_name, "") or "").casefold()
+            if "4 player" not in name or "circle" not in name:
+                continue
+            location = await safe_read(entity.location)
+            orientation = await safe_read(entity.orientation)
+            if location is not None and orientation is not None and _distance(arrow, location) < 1200:
+                key = (await safe_read(client.quest_id), location.x, location.y, location.z)
+                scale = await safe_read(entity.scale, 1.0)
+                if not isinstance(scale, (int, float)) or not math.isfinite(scale) or not 0.1 <= scale <= 10:
+                    scale = 1.0
+                entrances.append((_distance(arrow, location), location, orientation, key, scale))
+        if not entrances:
+            return None
+        _, location, orientation, key, scale = min(entrances, key=lambda row: row[0])
+        self._entry_attempt_key = key
+        attempt = self._entry_attempts.get(key, 0)
+        if attempt >= 8:
+            return None
+        self._emit_status("Approaching the dungeon entry pads")
+        log.debug("Entrance geometry scale=%s yaw=%s attempt=%s", scale, orientation.yaw, attempt)
+        target = sigil_approach(location, orientation, attempt, scale)
+        self._entry_walk_target = target
+        # Walk onto the pad after teleporting nearby so the game registers
+        # entry proximity through ordinary movement.
+        angle = math.atan2(target.y - location.y, target.x - location.x)
+        return XYZ(target.x + math.cos(angle) * 180,
+                   target.y + math.sin(angle) * 180, target.z)
 
     async def _try_teleport(self, client: Client, target: XYZ, pre_pos: XYZ) -> str:
         """
@@ -758,6 +1180,11 @@ class AutoQuester:
         dist_from_target = _distance(post_pos, target)
 
         if dist_from_original < SNAP_BACK_THRESHOLD and dist_from_target > SNAP_BACK_THRESHOLD:
+            log.debug("Teleport snap-back: before=%s after=%s target=%s", pre_pos, post_pos, target)
+            # NPC range at the starting location cannot prove we reached a
+            # different objective. Allow only the target NPC's small standoff.
+            if dist_from_target <= 200 and await safe_read(client.is_in_npc_range, False):
+                return "success"
             return "failed"
 
         # Teleport held but no immediate transition signal. The load

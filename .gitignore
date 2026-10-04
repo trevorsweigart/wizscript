@@ -141,6 +141,7 @@ celerybeat.pid
 jev_credentials.json
 combat_snapshot.json
 combat_decision.json
+quest_snapshot.json
 .venv
 .venv-build/
 env/

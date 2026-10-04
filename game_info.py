@@ -97,7 +97,7 @@ async def fetch_all(client: Client) -> GameState:
         pass
 
     try:
-        state.quest_finder_enabled = await client.quest_finder_enabled()
+        state.quest_finder_enabled = await client.stats.quest_finder_enabled()
     except Exception:
         pass
 

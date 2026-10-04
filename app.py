@@ -688,6 +688,12 @@ class App:
 
     async def _dump_game_state(self, client):
         debug_log.info("=== Game state ===")
+        from quest_state import export_quest_snapshot
+        try:
+            path = await export_quest_snapshot(client)
+            debug_log.info("Quest/UI snapshot: %s", path)
+        except Exception as error:
+            debug_log.info("Quest/UI snapshot unavailable: %s", error)
 
         async def _safe(label, coro):
             try:

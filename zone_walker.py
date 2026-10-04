@@ -29,6 +29,7 @@ async def walk_zone_path(
     path: List[dict],
     on_status: Optional[Callable[[str], None]] = None,
     is_active: Optional[Callable[[], bool]] = None,
+    on_transition: Optional[Callable] = None,
 ) -> bool:
     """Step through each transition in `path`.
 
@@ -64,6 +65,7 @@ async def walk_zone_path(
 
         emit(f"{hop} teleporting to door for {to_zone}...")
         try:
+            from_zone = await client.zone_name()
             await client.teleport(target, wait_on_inuse=True)
         except Exception as e:
             emit(f"{hop} teleport failed: {e}")
@@ -107,7 +109,20 @@ async def walk_zone_path(
             actual = await client.zone_name()
         except Exception:
             actual = None
+        if on_transition is not None and actual and from_zone and actual != from_zone:
+            try:
+                position = await client.body.position()
+                on_transition(from_zone, (target.x, target.y, target.z), actual,
+                              (position.x, position.y, position.z))
+            except Exception as error:
+                log.warning("Could not record observed route transition: %s", error)
         if actual != to_zone:
+            if actual == path[-1]["to_zone"]:
+                # Scripted intro variants can lead directly to the final
+                # destination on later visits. The observed final zone is
+                # authoritative; no remaining hops are needed.
+                emit(f"{hop} arrived directly at the destination {actual}")
+                return True
             emit(f"{hop} expected {to_zone}, got {actual!r}  --  aborting")
             return False
 

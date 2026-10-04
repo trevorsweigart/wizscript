@@ -304,6 +304,12 @@ class CombatStateCollector:
             pips = await reader.get(participant, "pip_count", "participant.pips")
             data["pips"] = await reader.fields(pips, PIP_FIELDS, "pips")
             data["stats"] = await reader.fields(await reader.get(participant, "game_stats"), STATS_FIELDS, "stats")
+            # GameStats can retain a creature's spawn HP after damage. The
+            # participant is the duel's live health source; preserve raw stats
+            # separately rather than letting them override combat health.
+            data["health"] = {"current": data.get("player_health"),
+                              "maximum": data.get("max_player_health"),
+                              "source": "combat_participant"}
             for group in EFFECT_GROUPS:
                 data[group] = await effects(reader, participant, group, f"participant.{group}")
             for single in ("intercept_effect", "polymorph_effect"):

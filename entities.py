@@ -12,6 +12,7 @@ Provides:
 
 import logging
 import math
+import re
 from typing import List, Optional, Tuple
 
 from wizwalker.client import Client
@@ -29,11 +30,11 @@ def distance(a: XYZ, b: XYZ) -> float:
 # ---------------------------------------------------------------------------
 
 def is_health_wisp(obj_name: Optional[str]) -> bool:
-    return bool(obj_name) and obj_name.lower().startswith("wc_wisphealth")
+    return bool(obj_name) and bool(re.search(r"(?:^|_)wisphealth(?:$|_|\d)", obj_name, re.I))
 
 
 def is_mana_wisp(obj_name: Optional[str]) -> bool:
-    return bool(obj_name) and obj_name.lower().startswith("wc_wispmana")
+    return bool(obj_name) and bool(re.search(r"(?:^|_)wispmana(?:$|_|\d)", obj_name, re.I))
 
 
 def is_any_wisp(obj_name: Optional[str]) -> bool:
@@ -73,9 +74,8 @@ async def list_nearby_entities(client: Client) -> List[EntityRow]:
             except Exception:
                 disp = ""
             body = await entity.actor_body()
-            if body is None:
-                continue
-            pos = await body.position()
+            # Static quest pickups need not have an AnimationBehavior/body.
+            pos = await body.position() if body is not None else await entity.location()
             out.append((distance(player_pos, pos), obj_name, disp, pos))
         except Exception:
             continue

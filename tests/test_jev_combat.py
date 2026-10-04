@@ -305,9 +305,9 @@ class StateTests(unittest.IsolatedAsyncioTestCase):
         participants = []
         combat_members = []
         for owner, team, health in ((100, 0, 350), (200, 1, 220)):
-            stats = memory(current_hitpoints=health, max_hitpoints=500, current_mana=80, max_mana=100,
+            stats = memory(current_hitpoints=500, max_hitpoints=500, current_mana=80, max_mana=100,
                            dmg_bonus_percent_all=0.4)
-            participant = memory(owner_id_full=owner, team_id=team, player_health=health, is_minion=False,
+            participant = memory(owner_id_full=owner, team_id=team, player_health=health, max_player_health=500, is_minion=False,
                                  untargetable=False, exit_combat=False, game_stats=stats,
                                  pip_count=memory(generic_pips=1, power_pips=2, shadow_pips=1, fire_pips=1),
                                  hanging_effects=[], public_hanging_effects=[], aura_effects=[],
@@ -330,6 +330,9 @@ class StateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.state["combatants"][0]["pips"]["fire_pips"], 1)
         self.assertEqual(result.state["combatants"][1]["relation"], "enemy")
         self.assertEqual(result.state["combatants"][1]["player_health"], 220)
+        self.assertEqual(result.state["combatants"][1]["health"],
+                         {"current": 220, "maximum": 500, "source": "combat_participant"})
+        self.assertEqual(result.state["combatants"][1]["stats"]["current_hitpoints"], 500)
         self.assertEqual(result.state["global_effect"]["effect_param"], 125)
 
     async def test_unreadable_values_are_null_not_zero(self):
