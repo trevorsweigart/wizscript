@@ -1,100 +1,106 @@
-"""
-Auto Combat — monitors for battles and handles them automatically.
-
-Runs as an independent loop that checks if the player is in battle,
-waits for the planning phase, and then runs the combat decision tree.
-"""
+"""Monitor battles and let Jev select actions on the background asyncio loop."""
 
 import asyncio
+import logging
 from typing import Callable, Optional
 
-from wizwalker.client import Client
+from combat import JevCombat, write_report
+from combat_state import CombatStateCollector
+from jev_credentials import load_api_key
 
-from combat import combat_main
 
-# Tick rate for checking battle state
-TICK_DELAY = 0.5
+log = logging.getLogger("auto_combat")
 
 
 class AutoCombat:
-    """
-    Async loop that monitors for battles and runs combat logic.
-
-    Can be toggled independently from auto-questing.
-    """
-
     def __init__(self):
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task = None
+        self._engine = None
+        self._generation = 0
         self._on_status: Optional[Callable[[str], None]] = None
+        self._on_failed = None
 
     @property
-    def is_running(self) -> bool:
+    def is_running(self):
         return self._running
 
-    def set_status_callback(self, callback: Callable[[str], None]):
+    def set_status_callback(self, callback):
         self._on_status = callback
 
-    def _emit_status(self, msg: str):
+    def set_failed_callback(self, callback):
+        self._on_failed = callback
+
+    def _emit_status(self, message):
         if self._on_status:
-            self._on_status(msg)
+            self._on_status(message)
 
-    # ------------------------------------------------------------------
-    # Start / Stop
-    # ------------------------------------------------------------------
+    def _failed(self):
+        if self._on_failed:
+            self._on_failed()
 
-    def start(self, client: Client, loop: asyncio.AbstractEventLoop):
-        """Begin the auto-combat monitoring loop."""
+    def start(self, client, loop):
         if self._running:
             return
+        try:
+            if not load_api_key():
+                raise RuntimeError("Save a Jev API key first.")
+        except RuntimeError as error:
+            self._emit_status(str(error))
+            self._failed()
+            return
+        self._generation += 1
         self._running = True
-        self._task = asyncio.run_coroutine_threadsafe(
-            self._combat_loop(client), loop
-        )
-        self._emit_status("Auto-combat enabled")
+        self._task = asyncio.run_coroutine_threadsafe(self._combat_loop(client, self._generation), loop)
+        self._emit_status("Jev auto-combat enabled")
 
     def stop(self):
-        """Stop the auto-combat loop."""
         self._running = False
+        self._generation += 1
         if self._task and not self._task.done():
             self._task.cancel()
         self._task = None
-        self._emit_status("Auto-combat disabled")
+        self._engine = None
+        self._emit_status("Jev auto-combat disabled")
 
-    # ------------------------------------------------------------------
-    # Main loop
-    # ------------------------------------------------------------------
+    async def export_snapshot(self, client):
+        if self._engine:
+            return await self._engine.export_snapshot(client)
+        snapshot = await CombatStateCollector().collect(client)
+        write_report("combat_snapshot.json", snapshot.state)
+        return snapshot
 
-    async def _combat_loop(self, client: Client):
-        """Monitor for battles and handle combat automatically."""
+    async def _combat_loop(self, client, generation):
+        engine = None
+        failures = 0
         try:
-            while self._running:
+            engine = JevCombat()
+            self._engine = engine
+            while self._running and self._generation == generation:
                 try:
-                    if await client.in_battle():
-                        self._emit_status("In battle — analyzing hand...")
-                        async with client.mouse_handler:
-                            result, description = await combat_main(client)
-
-                        if result == "acted":
-                            self._emit_status(f"⚔ {description}")
-                            # Wait for the round to play out
-                            await asyncio.sleep(2.0)
-                        elif result == "skipped":
-                            self._emit_status(f"⏸ {description}")
-                            await asyncio.sleep(1.0)
-                        else:
-                            # "waiting" — not in planning phase yet
-                            self._emit_status("Waiting for planning phase...")
-                            await asyncio.sleep(TICK_DELAY)
-                    else:
-                        self._emit_status("Monitoring for battles...")
-                        await asyncio.sleep(TICK_DELAY)
-
-                except Exception as e:
-                    self._emit_status(f"Combat error: {e}")
-                    await asyncio.sleep(1.0)
-
+                    result, description = await engine.tick(client)
+                    failures = 0
+                    self._emit_status(description)
+                    await asyncio.sleep(0.15 if result == "acted" else 0.5)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    failures += 1
+                    log.warning("Jev combat tick failed: %s", error)
+                    self._emit_status(f"Combat error: {error}")
+                    if failures >= 3:
+                        self._emit_status(f"Jev stopped after 3 errors: {error}")
+                        self._failed()
+                        break
+                    await asyncio.sleep(3.0)
         except asyncio.CancelledError:
             pass
+        except Exception as error:
+            self._emit_status(f"Jev could not start: {error}")
+            self._failed()
         finally:
-            self._running = False
+            if engine:
+                await engine.close()
+            if self._generation == generation:
+                self._running = False
+                self._engine = None

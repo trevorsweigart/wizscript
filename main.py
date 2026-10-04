@@ -13,7 +13,9 @@ from runtime_paths import data_directory
 
 def main():
     parser = argparse.ArgumentParser(description="WizScript")
-    parser.add_argument("--smoke-test", metavar="REPORT", help="Check the packaged GUI and write a JSON report, then exit")
+    diagnostics = parser.add_mutually_exclusive_group()
+    diagnostics.add_argument("--smoke-test", metavar="REPORT", help="Check the packaged GUI and write a JSON report, then exit")
+    diagnostics.add_argument("--check-jev", metavar="REPORT", help="Test a synthetic Jev Choice without controlling the game, then exit")
     args = parser.parse_args()
     handlers = [logging.FileHandler(data_directory() / "wizscript.log", encoding="utf-8")]
     if sys.stderr is not None:
@@ -27,6 +29,9 @@ def main():
     if args.smoke_test:
         from smoke_test import run
         return run(args.smoke_test)
+    if args.check_jev:
+        from check_jev import run_report
+        return run_report(args.check_jev)
     from app import App
     application = App()
     application.run()

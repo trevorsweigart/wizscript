@@ -34,6 +34,7 @@ from gui.auto_quest_panel import AutoQuestPanel
 from gui.auto_combat_panel import AutoCombatPanel
 from gui.debug_panel import DebugPanel
 from gui.zone_graph_window import ZoneGraphWindow
+from runtime_paths import data_directory
 
 debug_log = logging.getLogger("debug")
 
@@ -75,6 +76,7 @@ class App:
 
         self._auto_combat = AutoCombat()
         self._auto_combat.set_status_callback(self._on_auto_combat_status)
+        self._auto_combat.set_failed_callback(self._on_auto_combat_failed)
 
         self._auto_healer = AutoHealer()
         self._auto_healer.set_status_callback(self._on_auto_heal_status)
@@ -181,6 +183,7 @@ class App:
         self._auto_combat_panel = AutoCombatPanel(
             container,
             on_toggle=self._handle_auto_combat_toggle,
+            on_snapshot=self._handle_combat_snapshot,
         )
         self._auto_combat_panel.pack(fill="x", pady=(0, 6))
 
@@ -417,6 +420,24 @@ class App:
 
     def _on_auto_combat_status(self, message: str):
         self._root.after(0, self._auto_combat_panel.set_status, message)
+
+    def _on_auto_combat_failed(self):
+        def _update():
+            self._user_wants_combat = False
+            self._auto_combat_panel.force_stop()
+        self._root.after(0, _update)
+
+    def _handle_combat_snapshot(self):
+        client = self._client_mgr.active_client
+        if client is None:
+            self._auto_combat_panel.set_status("Connect to a client in battle first.")
+            return
+        self._auto_combat_panel.set_status("Reading combat state...")
+        self._run_async(
+            self._auto_combat.export_snapshot(client),
+            on_done=lambda _: self._auto_combat_panel.set_status(f"Saved {data_directory() / 'combat_snapshot.json'}"),
+            on_error=lambda e: self._auto_combat_panel.set_status(f"Snapshot error: {e}"),
+        )
 
     # ------------------------------------------------------------------
     # Auto heal handlers (triggered by AutoQuester on low HP)
