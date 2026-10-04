@@ -23,6 +23,8 @@ from collections import deque
 from datetime import datetime
 from typing import Callable, Dict, List, Optional, Tuple
 
+from runtime_paths import zone_map_path
+
 log = logging.getLogger("zone_mapper")
 
 ZoneCoord = Tuple[float, float, float]
@@ -51,8 +53,8 @@ def _close(a, b, radius: float = MERGE_RADIUS) -> bool:
 class ZoneMapper:
     """Thread-safe in-memory zone graph, persisted to JSON on every change."""
 
-    def __init__(self, file_path: str = DEFAULT_FILE):
-        self._file_path = file_path
+    def __init__(self, file_path: Optional[str] = None):
+        self._file_path = zone_map_path() if file_path is None else file_path
         self._lock = threading.Lock()
         self._data: dict = self._load()
 

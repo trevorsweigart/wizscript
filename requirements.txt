@@ -11,4 +11,4 @@ pefile==2024.8.26
 Pymem==1.13.1
 regex==2026.2.28
 win32_setctime==1.2.0
-wizwalker @ git+https://github.com/Deimos-Wizard101/Wizwalker@d22e8fbcfc515b4a76a89b24fa77717f6a546cb8
+wizwalker @ git+https://github.com/Deimos-Wizard101/Wizwalker
